@@ -17,20 +17,25 @@ const GameCanvas = () => {
     useEffect(() => {
         if (!canvasRef.current) return;
 
-        // Initialize Engine
-        engineRef.current = new GameEngine(canvasRef.current, {
-            onGameOver: () => console.log("Game Over"),
-        });
-
-        // Hook into engine update to sync state for UI
-        const originalUpdate = engineRef.current.update.bind(engineRef.current);
-        engineRef.current.update = (dt) => {
-            originalUpdate(dt);
-            setGameState({
-                level: engineRef.current.loader.currentLevelIndex,
-                frequency: engineRef.current.currentFrequency
+        try {
+            // Initialize Engine
+            engineRef.current = new GameEngine(canvasRef.current, {
+                onGameOver: () => console.log("Game Over"),
             });
-        };
+
+            // Hook into engine update to sync state for UI
+            const originalUpdate = engineRef.current.update.bind(engineRef.current);
+            engineRef.current.update = (dt) => {
+                originalUpdate(dt);
+                // Sync state
+                setGameState({
+                    level: engineRef.current.loader.currentLevelIndex,
+                    frequency: engineRef.current.currentFrequency
+                });
+            };
+        } catch (e) {
+            console.error("Engine Init Failed", e);
+        }
 
         // Handle Resize
         const handleResize = () => {
@@ -71,6 +76,10 @@ const GameCanvas = () => {
     const handleSwitchFreq = (freq) => {
         if (engineRef.current && gameStarted) {
             engineRef.current.currentFrequency = freq;
+            // Manually trigger sound to ensure feedback
+            if (engineRef.current.audio) {
+                engineRef.current.audio.playSwitch();
+            }
         }
     };
 
@@ -94,6 +103,7 @@ const GameCanvas = () => {
                     onMove={handleJoystick}
                     onAction={handleAction}
                     onSwitchFreq={handleSwitchFreq}
+                    frequency={gameState.frequency}
                 />
             )}
         </div>

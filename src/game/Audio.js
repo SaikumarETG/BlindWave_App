@@ -96,23 +96,44 @@ export class AudioManager {
     playCrash() {
         this.resume();
         const t = this.ctx.currentTime;
-        const bufferSize = this.ctx.sampleRate * 0.5; // 0.5 seconds
+
+        // 1. Noise Burst (Impact)
+        const bufferSize = this.ctx.sampleRate * 0.5;
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
-
         for (let i = 0; i < bufferSize; i++) {
             data[i] = Math.random() * 2 - 1;
         }
-
         const noise = this.ctx.createBufferSource();
         noise.buffer = buffer;
 
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.5, t);
-        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.5);
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.setValueAtTime(3000, t); // Start bright
+        noiseFilter.frequency.exponentialRampToValueAtTime(100, t + 0.2); // Get muffled
 
-        noise.connect(gain);
-        gain.connect(this.masterGain);
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.5, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.masterGain);
         noise.start(t);
+
+        // 2. Bass Drop (Thud)
+        const osc = this.ctx.createOscillator();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, t); // Start low
+        osc.frequency.exponentialRampToValueAtTime(10, t + 0.4); // Drop to sub-bass
+
+        const oscGain = this.ctx.createGain();
+        oscGain.gain.setValueAtTime(0.8, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+
+        osc.connect(oscGain);
+        oscGain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.5);
     }
 }

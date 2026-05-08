@@ -74,7 +74,11 @@ export class GameEngine {
     start() {
         this.isRunning = true;
         this.lastTime = performance.now();
-        this.audio.startAmbience(); // Start drone
+        try {
+            this.audio.startAmbience();
+        } catch (e) {
+            console.warn("Audio failed to start:", e);
+        }
         requestAnimationFrame(this.loop.bind(this));
     }
 
@@ -184,9 +188,6 @@ export class GameEngine {
 
         // Draw Player
         this.player.draw(this.ctx);
-
-        // Draw UI (Frequency Indicator)
-        this.drawUI();
     }
 
     drawBackground() {
@@ -194,36 +195,60 @@ export class GameEngine {
         this.ctx.fillStyle = '#050505';
         this.ctx.fillRect(0, 0, this.width, this.height);
 
-        // Cyber Grid
+        const gridSize = 50;
+        const time = performance.now() / 2000;
+        const basePulse = (Math.sin(time) + 1) / 2 * 0.1 + 0.1;
+
+        // Helper to draw grid
+        const drawGridLines = (ctx, width, height, strokeStyle) => {
+            ctx.beginPath();
+            ctx.strokeStyle = strokeStyle;
+            for (let x = 0; x <= width; x += gridSize) {
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+            }
+            for (let y = 0; y <= height; y += gridSize) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(width, y);
+            }
+            ctx.stroke();
+        };
+
+        // 1. Draw Base Grid
         this.ctx.save();
         this.ctx.lineWidth = 1;
+        drawGridLines(this.ctx, this.width, this.height, `rgba(0, 255, 255, ${basePulse})`);
+        this.ctx.restore();
 
-        const gridSize = 50;
-        const time = performance.now() / 2000; // Slow pulse
-        // Boosted opacity: 0.1 to 0.2 (was 0.02 to 0.05)
-        const pulse = (Math.sin(time) + 1) / 2 * 0.1 + 0.1;
+        // 2. Draw Reactive Pulses (The "Scan" Effect)
+        if (this.sonar && this.sonar.pulses.length > 0) {
+            this.ctx.save();
+            this.ctx.lineWidth = 2;
+            this.ctx.globalCompositeOperation = 'screen'; // Additive blending
 
-        this.ctx.strokeStyle = `rgba(0, 255, 255, ${pulse})`;
+            this.sonar.pulses.forEach(pulse => {
+                // Determine color based on frequency
+                let color = '0, 255, 255'; // Default Cyan
+                if (pulse.frequency === 'RED') color = '255, 50, 50';
+                if (pulse.frequency === 'GREEN') color = '50, 255, 50';
+                if (pulse.frequency === 'BLUE') color = '50, 50, 255';
 
-        // Vertical lines
-        for (let x = 0; x <= this.width; x += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, 0);
-            this.ctx.lineTo(x, this.height);
-            this.ctx.stroke();
+                // Create donut clipping path for the pulse wave
+                this.ctx.beginPath();
+                this.ctx.arc(pulse.x, pulse.y, pulse.radius + 20, 0, Math.PI * 2); // Outer
+                this.ctx.arc(pulse.x, pulse.y, Math.max(0, pulse.radius - 20), 0, Math.PI * 2, true); // Inner (hole)
+                this.ctx.clip();
+
+                // Draw bright grid inside the wave
+                drawGridLines(this.ctx, this.width, this.height, `rgba(${color}, 0.8)`);
+            });
+
+            this.ctx.restore();
         }
 
-        // Horizontal lines
-        for (let y = 0; y <= this.height; y += gridSize) {
-            this.ctx.beginPath();
-            this.ctx.moveTo(0, y);
-            this.ctx.lineTo(this.width, y);
-            this.ctx.stroke();
-        }
-
-        // Floating Dust
+        // 3. Floating Dust
         const t = performance.now() / 1000;
-        this.ctx.fillStyle = `rgba(0, 255, 255, ${pulse * 0.5})`;
+        this.ctx.fillStyle = `rgba(0, 255, 255, ${basePulse * 0.5})`;
         for (let i = 0; i < 20; i++) {
             const x = (Math.sin(i * 132.1 + t * 0.1) * 0.5 + 0.5) * this.width;
             const y = (Math.cos(i * 45.7 + t * 0.15) * 0.5 + 0.5) * this.height;
@@ -231,12 +256,6 @@ export class GameEngine {
             this.ctx.arc(x, y, 1, 0, Math.PI * 2);
             this.ctx.fill();
         }
-
-        this.ctx.restore();
-    }
-
-    drawUI() {
-        // UI is now handled by React Overlay
     }
 
     resize(width, height) {
